@@ -1,0 +1,116 @@
+/* Custom syntax highlighting styles for console theme */
+
+/* General syntax elements */
+.comment {
+  color: #6a9955; /* Green for comments */
+}
+
+.string {
+  color: #ce9178; /* Orange for strings */
+}
+
+.keyword {
+  color: #569cd6; /* Blue for keywords */
+}
+
+.number {
+  color: #b5cea8; /* Light green for numbers */
+}
+
+.function {
+  color: #dcdcaa; /* Yellow for functions */
+}
+
+/* JSON specific */
+.json-key {
+  color: #9cdcfe; /* Light blue for JSON keys */
+}
+
+.json-string {
+  color: #ce9178; /* Orange for JSON string values */
+}
+
+.json-number {
+  color: #b5cea8; /* Light green for JSON numbers */
+}
+
+.json-boolean {
+  color: #569cd6; /* Blue for JSON booleans */
+}
+
+.json-null {
+  color: #808080; /* Gray for JSON null */
+}
+
+/* Markdown specific */
+.md-header {
+  color: #569cd6; /* Blue for headers */
+  font-weight: bold;
+}
+
+.md-bold {
+  color: #dcdcaa; /* Yellow for bold text */
+  font-weight: bold;
+}
+
+.md-italic {
+  color: #dcdcaa; /* Yellow for italic text */
+  font-style: italic;
+}
+
+.md-code-block {
+  color: #ce9178; /* Orange for code blocks */
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+.md-inline-code {
+  color: #ce9178; /* Orange for inline code */
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+/* CSS specific */
+.css-selector {
+  color: #d7ba7d; /* Gold for selectors */
+}
+
+.css-property {
+  color: #9cdcfe; /* Light blue for properties */
+}
+
+.css-value {
+  color: #ce9178; /* Orange for values */
+}
+
+/* HTML specific */
+.html-tag {
+  color: #569cd6; /* Blue for HTML tags */
+}
+
+.html-attr {
+  color: #9cdcfe; /* Light blue for attributes */
+}
+
+.html-value {
+  color: #ce9178; /* Orange for attribute values */
+}
+
+/* Override any Prism theme styles */
+pre[class*="language-"] {
+  background: transparent !important;
+  color: inherit !important;
+  text-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
+code[class*="language-"] {
+  background: transparent !important;
+  color: inherit !important;
+}
