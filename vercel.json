@@ -3,6 +3,9 @@
     "app/api/index-repo/route.ts": {
       "maxDuration": 30
     },
+    "app/api/background-index/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/fetch-repo/route.ts": {
       "maxDuration": 15
     },
