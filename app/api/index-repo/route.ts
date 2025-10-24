@@ -101,8 +101,14 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
     // Add small delay for better UX
     await new Promise(resolve => setTimeout(resolve, 1000))
 
-    // Step 2: Fetch repository data from GitHub
-    const repoData = await fetchCompleteRepositoryData(repoUrl)
+    // Step 2: Fetch repository data from GitHub with timeout
+    console.log(`🔍 Attempting to fetch repository data for: ${repoUrl}`)
+    const repoData = await Promise.race([
+      fetchCompleteRepositoryData(repoUrl),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('GitHub API timeout after 8 seconds')), 8000)
+      )
+    ]) as any
     console.log(`✅ Fetched repository data: ${repoData.name}`)
 
     // Step 3: Update progress
@@ -264,13 +270,23 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
 
   } catch (error: any) {
     console.error(`❌ Error indexing repository ${repoId}:`, error)
-    await updateRepositoryStatus(
-      repoId, 
-      'failed', 
-      0, 
-      'Indexing failed',
-      error.message
-    )
+    
+    // Update status to failed with detailed error message
+    const errorMessage = error.message || 'Unknown error occurred during indexing'
+    console.log(`❌ Setting repository status to failed: ${errorMessage}`)
+    
+    try {
+      await updateRepositoryStatus(
+        repoId, 
+        'failed', 
+        0, 
+        'Indexing failed',
+        errorMessage
+      )
+      console.log(`✅ Updated repository status to failed`)
+    } catch (updateError) {
+      console.error('❌ Failed to update repository status:', updateError)
+    }
   }
 }
 

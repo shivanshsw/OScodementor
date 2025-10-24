@@ -51,18 +51,30 @@ export function parseGitHubUrl(repoUrl: string): { owner: string; repo: string }
  */
 export async function fetchRepository(owner: string, repo: string): Promise<GitHubRepository> {
   try {
-    const response: GitHubApiResponse<GitHubRepository> = await octokit.rest.repos.get({
-      owner,
-      repo,
-    })
+    console.log(`🔍 GitHub API: Fetching repository ${owner}/${repo}`)
     
+    const response: GitHubApiResponse<GitHubRepository> = await Promise.race([
+      octokit.rest.repos.get({
+        owner,
+        repo,
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Repository fetch timeout after 5 seconds')), 5000)
+      )
+    ]) as GitHubApiResponse<GitHubRepository>
+    
+    console.log(`✅ GitHub API: Repository fetched successfully`)
     return response.data
   } catch (error: any) {
+    console.error(`❌ GitHub API: Error fetching repository:`, error.message)
     if (error.status === 404) {
       throw new ApiError('Repository not found or is private', 404, 'NOT_FOUND')
     }
     if (error.status === 403 && error.message?.includes('rate limit')) {
       throw new ApiError('GitHub API rate limit exceeded', 429, 'RATE_LIMITED')
+    }
+    if (error.message?.includes('timeout')) {
+      throw new ApiError('GitHub API request timed out', 408, 'TIMEOUT')
     }
     throw new ApiError(`GitHub API error: ${error.message}`, error.status || 500, 'GITHUB_ERROR')
   }
@@ -96,36 +108,58 @@ export async function fetchRepositoryLanguages(owner: string, repo: string): Pro
  */
 export async function fetchRepositoryTree(owner: string, repo: string, branch: string = 'main'): Promise<GitHubTreeResponse> {
   try {
+    console.log(`🔍 GitHub API: Fetching repository tree for ${owner}/${repo} (${branch})`)
+    
     // First, get the branch reference to get the tree SHA
-    const branchRef = await octokit.rest.git.getRef({
-      owner,
-      repo,
-      ref: `heads/${branch}`,
-    })
+    const branchRef = await Promise.race([
+      octokit.rest.git.getRef({
+        owner,
+        repo,
+        ref: `heads/${branch}`,
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Branch ref fetch timeout after 5 seconds')), 5000)
+      )
+    ]) as any
     
     const commitSha = branchRef.data.object.sha
     
     // Get the commit to get the tree SHA
-    const commit = await octokit.rest.git.getCommit({
-      owner,
-      repo,
-      commit_sha: commitSha,
-    })
+    const commit = await Promise.race([
+      octokit.rest.git.getCommit({
+        owner,
+        repo,
+        commit_sha: commitSha,
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Commit fetch timeout after 5 seconds')), 5000)
+      )
+    ]) as any
     
     const treeSha = commit.data.tree.sha
     
     // Get the tree with recursive listing
-    const response: GitHubApiResponse<GitHubTreeResponse> = await octokit.rest.git.getTree({
-      owner,
-      repo,
-      tree_sha: treeSha,
-      recursive: 'true',
-    })
+    const response: GitHubApiResponse<GitHubTreeResponse> = await Promise.race([
+      octokit.rest.git.getTree({
+        owner,
+        repo,
+        tree_sha: treeSha,
+        recursive: 'true',
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Tree fetch timeout after 10 seconds')), 10000)
+      )
+    ]) as GitHubApiResponse<GitHubTreeResponse>
     
+    console.log(`✅ GitHub API: Repository tree fetched successfully (${response.data.tree.length} items)`)
     return response.data
   } catch (error: any) {
+    console.error(`❌ GitHub API: Error fetching repository tree:`, error.message)
     if (error.status === 404) {
       throw new ApiError('Repository tree not found', 404, 'NOT_FOUND')
+    }
+    if (error.message?.includes('timeout')) {
+      throw new ApiError('GitHub API request timed out', 408, 'TIMEOUT')
     }
     throw new ApiError(`Failed to fetch repository tree: ${error.message}`, error.status || 500, 'GITHUB_ERROR')
   }

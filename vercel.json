@@ -1,0 +1,24 @@
+{
+  "functions": {
+    "app/api/index-repo/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/fetch-repo/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/query-ai/route.ts": {
+      "maxDuration": 15
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    }
+  ]
+}
