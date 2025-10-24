@@ -56,7 +56,7 @@ GEMINI_API_KEY=your_gemini_api_key
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### 1. Clone the Repository
 
@@ -121,7 +121,7 @@ codementor/
 └── scripts/              # Utility scripts
 ```
 
-## 🔍 How It Works
+##  How It Works
 
 ### 1. Repository Indexing
 
@@ -206,7 +206,7 @@ Make sure to set these in your Vercel dashboard:
 - `GET /api/admin/repositories`: List all indexed repositories
 - `POST /api/admin/clear-cache`: Clear application cache
 
-## 🛠️ Development
+## ️ Development
 
 ### Running Tests
 
