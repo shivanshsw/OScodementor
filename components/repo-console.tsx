@@ -206,6 +206,16 @@ export default function RepoConsole({ repoUrl, onBack }: RepoConsoleProps) {
     )
   }
 
+  // Validate repoData to prevent undefined errors
+  const safeRepoData = {
+    name: repoData.name || 'Unknown Repository',
+    description: repoData.description || 'No description available',
+    stars: typeof repoData.stars === 'number' ? repoData.stars : 0,
+    languages: Array.isArray(repoData.languages) ? repoData.languages : [],
+    files: Array.isArray(repoData.files) ? repoData.files : [],
+    issues: Array.isArray(repoData.issues) ? repoData.issues : []
+  }
+
   return (
     <div className="w-full h-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
@@ -219,14 +229,14 @@ export default function RepoConsole({ repoUrl, onBack }: RepoConsoleProps) {
             {"Back"}
           </button>
           <div className="console-border-l pl-4 flex-1">
-            <div className="console-glow font-mono font-bold text-lg">{`> ${repoData.name}`}</div>
-            <p className="console-text text-muted-foreground text-xs mt-1">{repoData.description}</p>
+            <div className="console-glow font-mono font-bold text-lg">{`> ${safeRepoData.name}`}</div>
+            <p className="console-text text-muted-foreground text-xs mt-1">{safeRepoData.description}</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="console-text text-muted-foreground text-sm flex items-center gap-2">
             <span className="text-accent">★</span>
-            <span className="font-mono">{repoData.stars.toLocaleString()}</span>
+            <span className="font-mono">{safeRepoData.stars.toLocaleString()}</span>
           </div>
           <button
             onClick={() => setIsSettingsOpen(true)}
@@ -246,7 +256,7 @@ export default function RepoConsole({ repoUrl, onBack }: RepoConsoleProps) {
           className="console-border border-r flex flex-col bg-card/20 transition-all duration-75"
         >
           <ChatWindow
-            repoData={repoData}
+            repoData={safeRepoData}
             selectedFile={selectedFile}
             skillLevel={skillLevel}
             repoUrl={repoUrl}
@@ -285,7 +295,7 @@ export default function RepoConsole({ repoUrl, onBack }: RepoConsoleProps) {
           className="console-border border-l flex flex-col bg-card/10 transition-all duration-75"
         >
           <FileExplorer
-            files={repoData.files}
+            files={safeRepoData.files}
             onFileSelect={handleFileContextChange}
             selectedFile={selectedFile}
             onExplainFile={handleExplainFile}

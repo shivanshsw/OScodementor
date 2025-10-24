@@ -436,18 +436,35 @@ export async function fetchCompleteRepositoryData(repoUrl: string): Promise<Repo
     }))
     
     const result = {
-      name: repository.name,
+      name: repository.name || 'Unknown Repository',
       description: repository.description || 'No description available',
-      stars: repository.stargazers_count,
-      languages: languages,
-      files: files,
-      issues: transformedIssues
+      stars: repository.stargazers_count || 0,
+      languages: languages || [],
+      files: files || [],
+      issues: transformedIssues || []
     }
     
     console.log('✅ GitHub API: Repository data prepared successfully')
     return result
   } catch (error: any) {
     console.error('❌ GitHub API: Error in fetchCompleteRepositoryData:', error)
+    
+    // If it's a timeout or network error, provide a fallback response
+    if (error.message?.includes('timeout') || error.message?.includes('network')) {
+      console.log('🔄 GitHub API timeout/network error, providing fallback data')
+      const urlParts = repoUrl.replace('https://github.com/', '').split('/')
+      const repoName = urlParts[1] || 'Unknown Repository'
+      
+      return {
+        name: repoName,
+        description: 'Repository data temporarily unavailable',
+        stars: 0,
+        languages: [],
+        files: [],
+        issues: []
+      }
+    }
+    
     if (error instanceof ApiError) {
       throw error
     }

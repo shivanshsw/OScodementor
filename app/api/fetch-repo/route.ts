@@ -200,9 +200,19 @@ export async function POST(request: Request) {
     console.log('✅ Repository data fetched successfully:', {
       name: repoData.name,
       stars: repoData.stars,
-      filesCount: repoData.files.length,
-      issuesCount: repoData.issues.length
+      filesCount: repoData.files?.length || 0,
+      issuesCount: repoData.issues?.length || 0
     })
+
+    // Validate and provide fallbacks for missing data
+    const validatedRepoData = {
+      name: repoData.name || 'Unknown Repository',
+      description: repoData.description || 'No description available',
+      stars: repoData.stars || 0,
+      languages: repoData.languages || [],
+      files: repoData.files || [],
+      issues: repoData.issues || []
+    }
 
     // Add a note that caching is not available
     // Generate a super short description (not the exact GitHub description)
@@ -218,8 +228,8 @@ export async function POST(request: Request) {
     }
 
     const responseData = {
-      ...repoData,
-      description: generateShortDescription(repoData.name, repoData.description || null, repoData.languages, repoData.stars),
+      ...validatedRepoData,
+      description: generateShortDescription(validatedRepoData.name, validatedRepoData.description, validatedRepoData.languages, validatedRepoData.stars),
       cached: false,
       cacheNote: 'Caching not available - database or Elasticsearch not configured'
     }
