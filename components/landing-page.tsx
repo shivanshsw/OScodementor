@@ -95,7 +95,7 @@ export default function LandingPage({ onRepoSubmit }: LandingPageProps) {
           <div className="console-text text-muted-foreground/60 text-xs mt-5">
             <p className="mb-2">{"// Example repositories:"}</p>
             <div className="flex flex-wrap gap-2">
-              {["https://github.com/shivanshsw/EconoMuse","https://github.com/torvalds/linux","https://github.com/shivanshsw/OScodementor"].map(example => (
+              {["https://github.com/shivanshsw/EconoMuse","https://github.com/tekvision/axchessible","https://github.com/shivanshsw/OScodementor"].map(example => (
                 <button
                   key={example}
                   type="button"
@@ -126,6 +126,8 @@ export default function LandingPage({ onRepoSubmit }: LandingPageProps) {
               <div className="font-medium">What is this?</div>
               <div className="opacity-90">
                 CodeMentor explains GitHub repos like a mentor, with smart search, file explorer, and AI chat.
+                Try to use repos with not more than 500 to 600 files for handling timeout issues .
+                OS stands for OPEN-SOURCE.
               </div>
             </div>
           </TooltipContent>
