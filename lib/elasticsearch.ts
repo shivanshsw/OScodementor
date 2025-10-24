@@ -1,7 +1,7 @@
 // Elasticsearch integration for code indexing and search
 import { Client } from '@elastic/elasticsearch'
 
-// Elasticsearch client configuration
+// Elasticsearch client configuration with improved error handling
 const client = new Client({
   node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
   auth: {
@@ -10,16 +10,41 @@ const client = new Client({
   },
   tls: {
     rejectUnauthorized: false
-  }
+  },
+  requestTimeout: 30000, // 30 seconds
+  pingTimeout: 3000, // 3 seconds
+  maxRetries: 3,
+  resurrectStrategy: 'ping'
 })
 
 // Index names
 const REPOSITORY_INDEX = 'codementor_repositories'
 const FILES_INDEX = 'codementor_files'
 
+// Test Elasticsearch connection
+export async function testElasticsearchConnection(): Promise<boolean> {
+  try {
+    console.log('🔍 Testing Elasticsearch connection...')
+    const response = await client.ping()
+    console.log('✅ Elasticsearch connection successful')
+    return true
+  } catch (error: any) {
+    console.error('❌ Elasticsearch connection failed:', error.message)
+    return false
+  }
+}
+
 // Initialize Elasticsearch indices
 export async function initializeElasticsearch() {
   try {
+    console.log('🔍 Initializing Elasticsearch...')
+    
+    // Test connection first
+    const isConnected = await testElasticsearchConnection()
+    if (!isConnected) {
+      throw new Error('Cannot connect to Elasticsearch. Please check your configuration.')
+    }
+    
     // Check if indices exist
     const repoIndexExists = await client.indices.exists({ index: REPOSITORY_INDEX })
     const filesIndexExists = await client.indices.exists({ index: FILES_INDEX })
@@ -128,23 +153,41 @@ export async function indexRepository(repoData: any): Promise<void> {
   }
 }
 
-// Index a file
+// Index a file with retry logic
 export async function indexFile(fileData: any): Promise<string> {
-  try {
-    const response = await client.index({
-      index: FILES_INDEX,
-      body: {
-        ...fileData,
-        indexed_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
+  const maxRetries = 3
+  let lastError: Error
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`📄 Indexing file: ${fileData.file_path} (attempt ${attempt}/${maxRetries})`)
+      
+      const response = await client.index({
+        index: FILES_INDEX,
+        body: {
+          ...fileData,
+          indexed_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        }
+      })
+      
+      console.log(`✅ Indexed file: ${fileData.file_path}`)
+      return response._id
+    } catch (error: any) {
+      lastError = error
+      console.warn(`❌ Error indexing file ${fileData.file_path} (attempt ${attempt}/${maxRetries}):`, error.message)
+      
+      if (attempt === maxRetries) {
+        console.error(`❌ Failed to index file ${fileData.file_path} after ${maxRetries} attempts`)
+        throw error
       }
-    })
-    console.log(`✅ Indexed file: ${fileData.file_path}`)
-    return response._id
-  } catch (error) {
-    console.error('❌ Error indexing file:', error)
-    throw error
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+    }
   }
+  
+  throw lastError!
 }
 
 // Search repositories

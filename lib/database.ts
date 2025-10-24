@@ -1,10 +1,14 @@
 // Database connection and schema for CodeMentor indexing system
 import { Pool } from 'pg'
 
-// Database connection pool
+// Database connection pool with improved configuration
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+  maxUses: 7500, // Close (and replace) a connection after it has been used 7500 times
 })
 
 // Database schema interfaces
@@ -228,6 +232,34 @@ export async function createRepository(repoData: Omit<IndexedRepository, 'id' | 
   }
 }
 
+// Retry helper for database operations
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error: any) {
+      lastError = error
+      console.warn(`Database operation failed (attempt ${attempt}/${maxRetries}):`, error.message)
+      
+      if (attempt === maxRetries) {
+        throw error
+      }
+      
+      // Exponential backoff
+      const delay = baseDelay * Math.pow(2, attempt - 1)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  
+  throw lastError!
+}
+
 export async function updateRepositoryStatus(
   repoId: string, 
   status: IndexedRepository['index_status'],
@@ -237,30 +269,36 @@ export async function updateRepositoryStatus(
   totalFiles?: number,
   indexedFiles?: number
 ): Promise<void> {
-  const client = await pool.connect()
-  try {
-    await client.query(`
-      UPDATE indexed_repositories 
-      SET index_status = $1, index_progress = $2, updated_at = NOW()
-      WHERE id = $3
-    `, [status, progress, repoId])
+  await withRetry(async () => {
+    const client = await pool.connect()
+    try {
+      console.log(`📊 Updating repository status: ${repoId} -> ${status} (${progress}%)`)
+      
+      await client.query(`
+        UPDATE indexed_repositories 
+        SET index_status = $1, index_progress = $2, updated_at = NOW()
+        WHERE id = $3
+      `, [status, progress, repoId])
 
-    // Update progress table
-    await client.query(`
-      INSERT INTO indexing_progress (repo_id, status, progress, current_step, error_message, total_files, indexed_files)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (repo_id) DO UPDATE SET
-        status = EXCLUDED.status,
-        progress = EXCLUDED.progress,
-        current_step = EXCLUDED.current_step,
-        error_message = EXCLUDED.error_message,
-        total_files = EXCLUDED.total_files,
-        indexed_files = EXCLUDED.indexed_files,
-        updated_at = NOW()
-    `, [repoId, status, progress, currentStep, errorMessage, totalFiles || 0, indexedFiles || 0])
-  } finally {
-    client.release()
-  }
+      // Update progress table
+      await client.query(`
+        INSERT INTO indexing_progress (repo_id, status, progress, current_step, error_message, total_files, indexed_files)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (repo_id) DO UPDATE SET
+          status = EXCLUDED.status,
+          progress = EXCLUDED.progress,
+          current_step = EXCLUDED.current_step,
+          error_message = EXCLUDED.error_message,
+          total_files = EXCLUDED.total_files,
+          indexed_files = EXCLUDED.indexed_files,
+          updated_at = NOW()
+      `, [repoId, status, progress, currentStep, errorMessage, totalFiles || 0, indexedFiles || 0])
+      
+      console.log(`✅ Repository status updated successfully: ${repoId}`)
+    } finally {
+      client.release()
+    }
+  })
 }
 
 export async function updateRepositoryAccess(repoId: string): Promise<void> {

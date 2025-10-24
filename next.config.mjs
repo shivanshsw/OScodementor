@@ -6,9 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    serverComponentsExternalPackages: ['@octokit/rest'],
-  },
+  serverExternalPackages: ['@octokit/rest'],
   // Increase timeout for API routes
   async headers() {
     return [

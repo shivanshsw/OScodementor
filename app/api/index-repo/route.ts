@@ -91,10 +91,12 @@ export async function POST(request: Request) {
 
 // Async function to handle the actual indexing
 async function indexRepositoryAsync(repoId: string, repoUrl: string) {
+  console.log(`🔄 Starting indexing for repository: ${repoId}`)
+  console.log(`📝 Repository URL: ${repoUrl}`)
+  
   try {
-    console.log(`🔄 Starting indexing for repository: ${repoId}`)
-    
     // Step 1: Update status to indexing
+    console.log(`📊 Step 1: Updating status to indexing (5%)`)
     await updateRepositoryStatus(repoId, 'indexing', 5, 'Fetching repository data from GitHub...')
     console.log(`✅ Updated status: 5% - Fetching from GitHub`)
     
@@ -102,16 +104,26 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
     await new Promise(resolve => setTimeout(resolve, 1000))
 
     // Step 2: Fetch repository data from GitHub with timeout
-    console.log(`🔍 Attempting to fetch repository data for: ${repoUrl}`)
-    const repoData = await Promise.race([
-      fetchCompleteRepositoryData(repoUrl),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('GitHub API timeout after 8 seconds')), 8000)
-      )
-    ]) as any
-    console.log(`✅ Fetched repository data: ${repoData.name}`)
+    console.log(`🔍 Step 2: Fetching repository data from GitHub API...`)
+    console.log(`📝 Repository URL: ${repoUrl}`)
+    
+    let repoData: any
+    try {
+      repoData = await Promise.race([
+        fetchCompleteRepositoryData(repoUrl),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('GitHub API timeout after 8 seconds')), 8000)
+        )
+      ]) as any
+      console.log(`✅ Fetched repository data: ${repoData.name}`)
+      console.log(`📊 Repository stats: ${repoData.stars} stars, ${repoData.languages?.length || 0} languages`)
+    } catch (fetchError: any) {
+      console.error(`❌ Failed to fetch repository data:`, fetchError.message)
+      throw new Error(`GitHub API error: ${fetchError.message}`)
+    }
 
     // Step 3: Update progress
+    console.log(`📊 Step 3: Updating progress to 20% - Analyzing structure`)
     await updateRepositoryStatus(repoId, 'indexing', 20, 'Analyzing repository structure...')
     console.log(`✅ Updated status: 20% - Analyzing structure`)
     
@@ -119,14 +131,17 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
     await new Promise(resolve => setTimeout(resolve, 1500))
 
     // Step 4: Count total files
+    console.log(`📊 Step 4: Counting total files to index...`)
     const totalFiles = countFilesRecursively(repoData.files)
     console.log(`📊 Total files to index: ${totalFiles}`)
 
     // Step 5: Update total files count
+    console.log(`📊 Step 5: Updating progress to 30% - Found ${totalFiles} files`)
     await updateRepositoryStatus(repoId, 'indexing', 30, `Found ${totalFiles} files to index...`, undefined, totalFiles, 0)
     console.log(`✅ Updated status: 30% - Found ${totalFiles} files`)
 
     // Index repository metadata to Elasticsearch
+    console.log(`📊 Step 6: Indexing repository metadata to Elasticsearch...`)
     const indexedRepo = {
       id: repoId,
       repo_url: repoUrl,
@@ -142,67 +157,92 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
       is_popular: repoData.stars > 1000
     }
 
-    // Step 6: Index repository metadata
-    await indexRepository(indexedRepo)
-    console.log(`✅ Indexed repository metadata`)
+    try {
+      await indexRepository(indexedRepo)
+      console.log(`✅ Indexed repository metadata`)
+    } catch (esError: any) {
+      console.error(`❌ Failed to index repository metadata:`, esError.message)
+      throw new Error(`Elasticsearch error: ${esError.message}`)
+    }
     
+    console.log(`📊 Step 7: Updating progress to 40% - Building search index`)
     await updateRepositoryStatus(repoId, 'indexing', 40, 'Building search index...')
     console.log(`✅ Updated status: 40% - Building search index`)
     
     // Add small delay for better UX
     await new Promise(resolve => setTimeout(resolve, 1000))
 
-    // Step 7: Flatten files and fetch ALL file contents from GitHub (not just top N)
+    // Step 8: Flatten files and fetch ALL file contents from GitHub
+    console.log(`📊 Step 8: Starting file indexing process...`)
     const flatFiles: { path: string }[] = []
     flattenFiles(repoData.files, flatFiles)
+    console.log(`📁 Flattened ${flatFiles.length} files for indexing`)
 
     let indexedFilesCount = 0
+    let failedFilesCount = 0
     const parsed = parseGitHubUrl(repoUrl)
     const owner = parsed?.owner || repoUrl.split('/')[3]
     const repo = parsed?.repo || repoData.name
+    
+    console.log(`📝 Repository details: ${owner}/${repo}`)
 
-    // Fetch real content for ALL files during indexing
-    await indexFilesRecursively(repoId, repoData.files, owner, repo, async (filePath, content, fileType, language) => {
-      try {
-        const fileData = {
-          id: `${repoId}_${filePath.replace(/[^a-zA-Z0-9]/g, '_')}`,
-          repo_id: repoId,
-          file_path: filePath,
-          file_content: content,
-          file_size: content.length,
-          file_language: language,
-          file_type: fileType
+    try {
+      // Fetch real content for ALL files during indexing
+      await indexFilesRecursively(repoId, repoData.files, owner, repo, async (filePath, content, fileType, language) => {
+        try {
+          console.log(`📄 Processing file: ${filePath}`)
+          const fileData = {
+            id: `${repoId}_${filePath.replace(/[^a-zA-Z0-9]/g, '_')}`,
+            repo_id: repoId,
+            file_path: filePath,
+            file_content: content,
+            file_size: content.length,
+            file_language: language,
+            file_type: fileType
+          }
+
+          await indexFile(fileData)
+          indexedFilesCount++
+          console.log(`✅ Successfully indexed: ${filePath}`)
+
+          // Update progress every 2 files for smoother animation
+          if (indexedFilesCount % 2 === 0 || indexedFilesCount === totalFiles) {
+            const progress = Math.min(40 + Math.floor((indexedFilesCount / totalFiles) * 50), 90)
+            console.log(`📊 Updating progress: ${progress}% - Indexed ${indexedFilesCount}/${totalFiles} files`)
+            await updateRepositoryStatus(
+              repoId, 
+              'indexing', 
+              progress, 
+              `Indexing files... ${indexedFilesCount}/${totalFiles}`,
+              undefined,
+              totalFiles,
+              indexedFilesCount
+            )
+            console.log(`✅ Updated status: ${progress}% - Indexed ${indexedFilesCount}/${totalFiles} files`)
+          }
+        } catch (fileError: any) {
+          failedFilesCount++
+          console.error(`❌ Error indexing file ${filePath}:`, fileError.message)
+          // Continue with other files even if one fails
         }
+      })
+      
+      console.log(`📊 File indexing completed: ${indexedFilesCount} successful, ${failedFilesCount} failed`)
+    } catch (indexingError: any) {
+      console.error(`❌ Critical error during file indexing:`, indexingError.message)
+      throw new Error(`File indexing failed: ${indexingError.message}`)
+    }
 
-        await indexFile(fileData)
-        indexedFilesCount++
-
-        // Update progress every 2 files for smoother animation
-        if (indexedFilesCount % 2 === 0 || indexedFilesCount === totalFiles) {
-          const progress = Math.min(40 + Math.floor((indexedFilesCount / totalFiles) * 50), 90)
-          await updateRepositoryStatus(
-            repoId, 
-            'indexing', 
-            progress, 
-            `Indexing files... ${indexedFilesCount}/${totalFiles}`,
-            undefined,
-            totalFiles,
-            indexedFilesCount
-          )
-          console.log(`✅ Updated status: ${progress}% - Indexed ${indexedFilesCount}/${totalFiles} files`)
-        }
-      } catch (fileError) {
-        console.error(`❌ Error indexing file ${filePath}:`, fileError)
-        // Continue with other files even if one fails
-      }
-    })
-
+    console.log(`📊 Step 9: Updating progress to 85% - File contents fetched`)
     await updateRepositoryStatus(repoId, 'indexing', 85, 'Fetched file contents from GitHub')
 
-    // Step 7.5: Generate insights (README-first approach)
+    // Step 10: Generate insights (README-first approach)
+    console.log(`📊 Step 10: Generating repository insights...`)
     await updateRepositoryStatus(repoId, 'indexing', 92, 'Generating repository insights...')
+    
     try {
       const fileList = flatFiles.map(f => ({ path: f.path, type: 'file' }))
+      console.log(`📝 Processing ${fileList.length} files for insights generation`)
       
       // Try to find README first
       const readmeFiles = flatFiles.filter(f => 
@@ -215,6 +255,7 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
           // Fetch README content
           const readmeContent = await fetchRawFileContent(owner, repo, readmeFiles[0].path)
           if (readmeContent && readmeContent.content) {
+            console.log(`📄 README content fetched, generating insights...`)
             const insights = await generateInsightsFromReadme(repoData.name, readmeContent.content, fileList)
             await updateRepositoryInsights(repoId, { 
               repo_summary: insights.summary,
@@ -225,8 +266,8 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
           } else {
             throw new Error('Could not fetch README content')
           }
-        } catch (readmeError) {
-          console.warn('⚠️ README-based insights failed, falling back to AI analysis:', readmeError)
+        } catch (readmeError: any) {
+          console.warn('⚠️ README-based insights failed, falling back to AI analysis:', readmeError.message)
           // Fallback to AI analysis
           const structureSummary = await analyzeRepositoryStructure(repoData.name, fileList)
           await updateRepositoryInsights(repoId, { repo_summary: structureSummary || null })
@@ -237,24 +278,30 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
         const structureSummary = await analyzeRepositoryStructure(repoData.name, fileList)
         await updateRepositoryInsights(repoId, { repo_summary: structureSummary || null })
       }
-    } catch (e) {
-      console.warn('⚠️ Failed to generate insights:', e)
+    } catch (insightsError: any) {
+      console.warn('⚠️ Failed to generate insights:', insightsError.message)
+      // Don't fail the entire indexing process for insights
     }
 
-    // Step 8: Verify indexing was successful before marking as completed
+    // Step 11: Verify indexing was successful before marking as completed
+    console.log(`📊 Step 11: Verifying indexing results...`)
     if (indexedFilesCount === 0) {
       throw new Error('No files were successfully indexed')
     }
 
+    console.log(`✅ Indexing verification: ${indexedFilesCount} files indexed successfully`)
+
     // Best-effort smoke test: do not fail the job if ES is eventually consistent
     try {
+      console.log(`🔍 Running search smoke test...`)
       const testSearch = await searchFilesInRepository(repoId, 'test')
       console.log(`✅ Search test attempted: ${testSearch.length} results`)
-    } catch (searchError) {
-      console.warn('⚠️ Search smoke test failed (non-fatal):', (searchError as any)?.message || searchError)
+    } catch (searchError: any) {
+      console.warn('⚠️ Search smoke test failed (non-fatal):', searchError.message)
     }
 
-    // Only mark as completed if everything worked
+    // Step 12: Mark as completed
+    console.log(`📊 Step 12: Marking repository as completed (100%)`)
     await updateRepositoryStatus(
       repoId, 
       'completed', 
@@ -265,11 +312,15 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
       indexedFilesCount
     )
     console.log(`✅ Indexing completed successfully: ${indexedFilesCount} files indexed`)
-
-    console.log(`✅ Successfully indexed repository: ${repoId}`)
+    console.log(`🎉 Successfully indexed repository: ${repoId}`)
 
   } catch (error: any) {
     console.error(`❌ Error indexing repository ${repoId}:`, error)
+    console.error(`❌ Error details:`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    })
     
     // Update status to failed with detailed error message
     const errorMessage = error.message || 'Unknown error occurred during indexing'
@@ -284,8 +335,8 @@ async function indexRepositoryAsync(repoId: string, repoUrl: string) {
         errorMessage
       )
       console.log(`✅ Updated repository status to failed`)
-    } catch (updateError) {
-      console.error('❌ Failed to update repository status:', updateError)
+    } catch (updateError: any) {
+      console.error('❌ Failed to update repository status:', updateError.message)
     }
   }
 }
