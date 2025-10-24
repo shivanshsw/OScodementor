@@ -71,7 +71,26 @@ export async function POST(request: Request) {
     console.log(`✅ Created repository record: ${repository.id}`)
 
     // Start indexing process (non-blocking)
+    console.log(`🚀 Starting background indexing for repo: ${repository.id}`)
+    console.log(`🔍 Repository details:`, { repoId: repository.id, repoUrl })
+    
+    // Start the background indexing process
     indexRepositoryAsync(repository.id, repoUrl)
+      .then(() => {
+        console.log(`✅ Background indexing completed for ${repository.id}`)
+      })
+      .catch(error => {
+        console.error(`❌ Background indexing failed for ${repository.id}:`, error)
+        console.error(`❌ Error details:`, {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        })
+        // Update status to failed
+        updateRepositoryStatus(repository.id, 'failed', 0, 'Indexing failed', error.message).catch(updateError => {
+          console.error('❌ Failed to update status to failed:', updateError)
+        })
+      })
 
     return Response.json({
       success: true,
@@ -93,12 +112,30 @@ export async function POST(request: Request) {
 async function indexRepositoryAsync(repoId: string, repoUrl: string) {
   console.log(`🔄 Starting indexing for repository: ${repoId}`)
   console.log(`📝 Repository URL: ${repoUrl}`)
+  console.log(`🔍 Environment check:`, {
+    hasDatabaseUrl: !!process.env.DATABASE_URL,
+    hasElasticsearchUrl: !!process.env.ELASTICSEARCH_URL,
+    hasGithubToken: !!process.env.GITHUB_TOKEN,
+    hasGeminiApiKey: !!process.env.GEMINI_API_KEY
+  })
   
   try {
     // Step 1: Update status to indexing
     console.log(`📊 Step 1: Updating status to indexing (5%)`)
-    await updateRepositoryStatus(repoId, 'indexing', 5, 'Fetching repository data from GitHub...')
-    console.log(`✅ Updated status: 5% - Fetching from GitHub`)
+    console.log(`🔍 About to call updateRepositoryStatus with:`, { repoId, status: 'indexing', progress: 5 })
+    
+    try {
+      await Promise.race([
+        updateRepositoryStatus(repoId, 'indexing', 5, 'Fetching repository data from GitHub...'),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database update timeout after 10 seconds')), 10000)
+        )
+      ])
+      console.log(`✅ Updated status: 5% - Fetching from GitHub`)
+    } catch (dbError: any) {
+      console.error(`❌ Database update failed:`, dbError.message)
+      throw new Error(`Database error: ${dbError.message}`)
+    }
     
     // Add small delay for better UX
     await new Promise(resolve => setTimeout(resolve, 1000))

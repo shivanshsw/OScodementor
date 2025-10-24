@@ -84,11 +84,49 @@ export async function generateCodeResponse(
     )
 
     if (!response) return "Sorry, something went wrong with the AI service."
-    return response.text
+    
+    // Format the response for better readability
+    const formattedResponse = formatResponse(response.text)
+    return formattedResponse
   } catch (error) {
     console.error('Error generating Gemini response:', error)
     throw new Error('Failed to generate AI response')
   }
+}
+
+// Format AI response for better readability
+function formatResponse(text: string): string {
+  if (!text) return text
+  
+  // Clean up the response
+  let formatted = text.trim()
+  
+  // Only format actual markdown elements, not regular text
+  // Ensure proper spacing around bullet points (only if they start with -)
+  formatted = formatted.replace(/\n\s*-\s*/g, '\n- ')
+  
+  // Ensure proper spacing around numbered lists (only if they start with numbers)
+  formatted = formatted.replace(/\n\s*(\d+\.)\s*/g, '\n$1 ')
+  
+  // Ensure proper spacing around headers (only if they start with #)
+  formatted = formatted.replace(/\n\s*(#{1,6})\s*/g, '\n$1 ')
+  
+  // Ensure proper spacing around code blocks (only if they have ```)
+  formatted = formatted.replace(/```/g, '\n```')
+  
+  // Ensure proper spacing around blockquotes (only if they start with >)
+  formatted = formatted.replace(/\n\s*>\s*/g, '\n> ')
+  
+  // Clean up multiple consecutive newlines
+  formatted = formatted.replace(/\n{3,}/g, '\n\n')
+  
+  // Only add paragraph breaks for actual sentence endings, not mid-sentence
+  formatted = formatted.replace(/([.!?])\s+([A-Z][a-z])/g, '$1\n\n$2')
+  
+  // Clean up the final result
+  formatted = formatted.trim()
+  
+  return formatted
 }
 
 function buildSystemPrompt(context: ChatContext): string {
@@ -112,12 +150,16 @@ CRITICAL RESPONSE RULES:
 3. NO HEDGING: Do NOT use: "maybe", "perhaps", "it seems", "appears to", "might", "likely", "probably".
 4. GROUNDED ANSWERS: Reference specific files, functions, or lines when making claims.
 5. CONFIDENT TONE: Be direct and authoritative in explanations.
-6. FORMATTING: Use markdown formatting for better readability:
-   - Use **bold** for important terms and concepts
-   - Use *italic* for emphasis
-   - Use \`code\` for inline code and code blocks with language specification
-   - Use bullet points and numbered lists for structured information
-   - Use > blockquotes for important notes or warnings
+6. FORMATTING: Use formatting SPARINGLY and only when appropriate:
+   - Use **bold** ONLY for key technical terms, file names, or important concepts
+   - Use *italic* ONLY for emphasis on specific words
+   - Use \`code\` ONLY for actual code snippets, function names, or technical terms
+   - Use bullet points (-) ONLY for lists of items
+   - Use numbered lists (1., 2., 3.) ONLY for step-by-step instructions
+   - Use > blockquotes ONLY for important warnings or notes
+   - Use headers (##, ###) ONLY for major section breaks
+   - Keep regular explanatory text as normal paragraphs
+   - Don't over-format - most text should remain plain
 
 ASSERTIVE REWRITE EXAMPLES:
 - Hedged: "It seems the API calls this function to fetch data."

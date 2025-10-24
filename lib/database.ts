@@ -269,19 +269,27 @@ export async function updateRepositoryStatus(
   totalFiles?: number,
   indexedFiles?: number
 ): Promise<void> {
+  console.log(`🔍 updateRepositoryStatus called with:`, { repoId, status, progress, currentStep })
+  
   await withRetry(async () => {
+    console.log(`🔍 Getting database connection...`)
     const client = await pool.connect()
+    console.log(`✅ Database connection acquired`)
+    
     try {
       console.log(`📊 Updating repository status: ${repoId} -> ${status} (${progress}%)`)
       
-      await client.query(`
+      console.log(`🔍 Executing UPDATE query...`)
+      const updateResult = await client.query(`
         UPDATE indexed_repositories 
         SET index_status = $1, index_progress = $2, updated_at = NOW()
         WHERE id = $3
       `, [status, progress, repoId])
+      console.log(`✅ UPDATE query completed, rows affected: ${updateResult.rowCount}`)
 
+      console.log(`🔍 Executing INSERT/UPDATE query for progress table...`)
       // Update progress table
-      await client.query(`
+      const progressResult = await client.query(`
         INSERT INTO indexing_progress (repo_id, status, progress, current_step, error_message, total_files, indexed_files)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (repo_id) DO UPDATE SET
@@ -293,10 +301,16 @@ export async function updateRepositoryStatus(
           indexed_files = EXCLUDED.indexed_files,
           updated_at = NOW()
       `, [repoId, status, progress, currentStep, errorMessage, totalFiles || 0, indexedFiles || 0])
+      console.log(`✅ Progress table query completed`)
       
       console.log(`✅ Repository status updated successfully: ${repoId}`)
+    } catch (queryError: any) {
+      console.error(`❌ Database query failed:`, queryError.message)
+      throw queryError
     } finally {
+      console.log(`🔍 Releasing database connection...`)
       client.release()
+      console.log(`✅ Database connection released`)
     }
   })
 }
