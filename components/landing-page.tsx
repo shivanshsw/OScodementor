@@ -95,7 +95,7 @@ export default function LandingPage({ onRepoSubmit }: LandingPageProps) {
           <div className="console-text text-muted-foreground/60 text-xs mt-5">
             <p className="mb-2">{"// Example repositories:"}</p>
             <div className="flex flex-wrap gap-2">
-              {["https://github.com/vercel/next.js","https://github.com/facebook/react","https://github.com/torvalds/linux"].map(example => (
+              {["https://github.com/shivanshsw/EconoMuse","https://github.com/torvalds/linux","https://github.com/shivanshsw/OScodementor"].map(example => (
                 <button
                   key={example}
                   type="button"
